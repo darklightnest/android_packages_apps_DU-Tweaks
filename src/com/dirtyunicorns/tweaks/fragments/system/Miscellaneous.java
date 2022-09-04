@@ -16,8 +16,10 @@
 
 package com.dirtyunicorns.tweaks.fragments.system;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.ContentResolver;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Bundle;
@@ -38,6 +40,8 @@ import com.android.settingslib.search.SearchIndexable;
 
 import com.dirtyunicorns.support.preferences.SystemSettingMasterSwitchPreference;
 
+import com.android.internal.util.du.PackageUtils;
+import com.android.internal.util.du.Utils;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -57,7 +61,8 @@ public class Miscellaneous extends SettingsPreferenceFragment
     private static final String SYS_GAMES_SPOOF = "persist.sys.pixelprops.games";
     private static final String SYS_PHOTOS_SPOOF = "persist.sys.pixelprops.gphotos";
     private static final String SYS_STREAM_SPOOF = "persist.sys.pixelprops.streaming";
-
+    private static final String NAVIGATION_BAR_RECENTS_STYLE = "navbar_recents_style";
+    
     private SystemSettingMasterSwitchPreference mGamingMode;
     private ListPreference mScrollingCachePref;
     private ListPreference mScreenOffAnimation;
@@ -65,6 +70,7 @@ public class Miscellaneous extends SettingsPreferenceFragment
     private SwitchPreference mGamesSpoof;
     private SwitchPreference mPhotosSpoof;
     private SwitchPreference mStreamSpoof;
+    private ListPreference mNavbarRecentsStyle;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -108,6 +114,14 @@ public class Miscellaneous extends SettingsPreferenceFragment
         mStreamSpoof = (SwitchPreference) findPreference(KEY_STREAM_SPOOF);
         mStreamSpoof.setChecked(SystemProperties.getBoolean(SYS_STREAM_SPOOF, true));
         mStreamSpoof.setOnPreferenceChangeListener(this);
+
+        mNavbarRecentsStyle = (ListPreference) findPreference(NAVIGATION_BAR_RECENTS_STYLE);
+        int recentsStyle = Settings.System.getInt(resolver,
+                Settings.System.OMNI_NAVIGATION_BAR_RECENTS, 0);
+
+        mNavbarRecentsStyle.setValue(Integer.toString(recentsStyle));
+        mNavbarRecentsStyle.setSummary(mNavbarRecentsStyle.getEntry());
+        mNavbarRecentsStyle.setOnPreferenceChangeListener(this);
     }
 
     @Override
@@ -136,8 +150,54 @@ public class Miscellaneous extends SettingsPreferenceFragment
             boolean value = (Boolean) newValue;
             SystemProperties.set(SYS_STREAM_SPOOF, value ? "true" : "false");
             return true;
+        } else if (preference == mNavbarRecentsStyle) {
+            int value = Integer.valueOf((String) newValue);
+            if (value == 1) {
+                if (!isOmniSwitchInstalled()){
+                    doOmniSwitchUnavail();
+                } else if (!Utils.isOmniSwitchRunning(getActivity())) {
+                    doOmniSwitchConfig();
+                }
+            }
+            int index = mNavbarRecentsStyle.findIndexOfValue((String) newValue);
+            mNavbarRecentsStyle.setSummary(mNavbarRecentsStyle.getEntries()[index]);
+            Settings.System.putInt(getContentResolver(), Settings.System.OMNI_NAVIGATION_BAR_RECENTS, value);
+            return true;
         }
         return false;
+    }
+
+  private void checkForOmniSwitchRecents() {
+        if (!isOmniSwitchInstalled()){
+            doOmniSwitchUnavail();
+        } else if (!Utils.isOmniSwitchRunning(getActivity())) {
+            doOmniSwitchConfig();
+        }
+    }
+
+    private void doOmniSwitchConfig() {
+        AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(getActivity());
+        alertDialogBuilder.setTitle(R.string.omniswitch_title);
+        alertDialogBuilder.setMessage(R.string.omniswitch_dialog_running_new)
+            .setPositiveButton(R.string.omniswitch_settings, new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog,int id) {
+                    startActivity(Utils.INTENT_LAUNCH_APP);
+                }
+            });
+        AlertDialog alertDialog = alertDialogBuilder.create();
+        alertDialog.show();
+    }
+
+    private void doOmniSwitchUnavail() {
+        AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(getActivity());
+        alertDialogBuilder.setTitle(R.string.omniswitch_title);
+        alertDialogBuilder.setMessage(R.string.omniswitch_dialog_unavail);
+        AlertDialog alertDialog = alertDialogBuilder.create();
+        alertDialog.show();
+    }
+
+    private boolean isOmniSwitchInstalled() {
+        return PackageUtils.isAvailableApp(Utils.APP_PACKAGE_NAME, getActivity());
     }
 
     public static void reset(Context mContext) {
